@@ -4,6 +4,17 @@
 
 ---
 
+## 📋 Deliverables Summary Checklist
+
+| # | Deliverable | Status & Location |
+|:---|:---|:---|
+| **1** | **Complete Source Code (Zip & Repo)** | 📂 [`ticket-booking-system.zip`](file:///Users/anmoldadhich/Desktop/ticket-booking-system.zip) (441 KB) & [GitHub Repository](https://github.com/anmoldadhich02/ticket-booking-system) |
+| **2** | **README Documentation** | 📄 Setup guide, `.env.example`, API docs, DB schema, seat hold & waitlist logic (Included below) |
+| **3** | **Hosted Application Guide** | 🚀 Ready for 1-click deployment on **Vercel** (Frontend) + **Railway / Render** (Backend & PostgreSQL) |
+| **4** | **System Design Write-Up (800 words max)** | 📄 [`SYSTEM_DESIGN.md`](file:///Users/anmoldadhich/Desktop/ticket-booking-system/SYSTEM_DESIGN.md) (678 words — covers seat hold TTL, concurrency, waitlists & offers) |
+
+---
+
 ## 🌟 Key Engineering Features
 
 - **🛡️ P0 Concurrency Protection**: Guaranteed zero double-booking or double-holding under simultaneous parallel buyer requests using PostgreSQL transaction row-level locking (`FOR UPDATE`) and partial unique indexes.
@@ -32,55 +43,117 @@
 
 ---
 
-## 📁 Repository Structure
+## 🗄️ Database Schema & Architecture
 
-```text
-ticket-booking-system/
-├── docker-compose.yml          # PostgreSQL 16 & Redis 7 development containers
-├── .env.example                # Unified environment variables template
-├── SYSTEM_DESIGN.md            # In-depth system design & concurrency write-up
-├── API_DOCUMENTATION.md        # Comprehensive REST API contracts
-├── README.md                   # Full documentation & setup guide
-│
-├── server/                     # NestJS Backend API & Real-time Gateway
-│   ├── prisma/
-│   │   ├── schema.prisma       # 14 relational tables & partial indexes
-│   │   └── seed.ts             # Realistic demo venues, events, & users
-│   ├── src/
-│   │   ├── core/               # PrismaService, RedisService, WebSockets
-│   │   ├── common/             # Guards, decorators, filters, interceptors
-│   │   └── modules/
-│   │       ├── auth/           # JWT authentication & bcrypt hashing
-│   │       ├── venues/         # Venue CRUD & visual layout configuration
-│   │       ├── events/         # Events discovery & inventory generation
-│   │       ├── holds/          # Concurrency hold engine & TTL workers
-│   │       ├── bookings/       # Atomic checkout & cancellation triggers
-│   │       ├── waitlists/      # FIFO queues & cascading offer engine
-│   │       ├── tickets/        # QR code payload & image generation
-│   │       ├── notifications/  # Resend email & WebSocket gateway
-│   │       └── analytics/      # Organiser & Admin metrics calculation
-│   └── test/
-│       └── booking-engine.spec.ts  # Concurrency stress tests (20+ buyers)
-│
-└── client/                     # Next.js 14 Frontend Application
-    ├── app/
-    │   ├── page.tsx            # Cinematic Landing Page
-    │   ├── events/page.tsx     # Event discovery with instant filters
-    │   ├── events/[id]/page.tsx# Event details & capacity overview
-    │   ├── events/[id]/seats/  # Visual interactive seat map with live sync
-    │   ├── checkout/[holdId]/  # Checkout countdown & order summary
-    │   ├── bookings/[id]/      # Digital QR ticket pass & cancellation
-    │   ├── dashboard/          # Customer bookings & waitlist claims
-    │   ├── organiser/          # Organiser revenue & event publisher
-    │   ├── admin/              # Admin console & visual venue builder
-    │   ├── login/page.tsx      # Sign in with One-Click Demo accounts
-    │   └── register/page.tsx   # Sign up with role selection
-    ├── components/
-    │   ├── seat-map/           # SVG grid, legend, and zoom/pan canvas
-    │   ├── booking/            # Countdown timer, ticket card
-    │   └── layout/             # Navbar, footer
-    └── providers/              # TanStack Query, Auth, & Socket providers
+The database consists of **14 relational tables** in PostgreSQL managed through Prisma ORM:
+
+```mermaid
+erDiagram
+    USERS ||--o{ EVENTS : organizes
+    USERS ||--o{ BOOKINGS : places
+    USERS ||--o{ SEAT_HOLDS : creates
+    USERS ||--o{ WAITLIST_ENTRIES : joins
+    
+    VENUES ||--|{ SEAT_CATEGORIES : defines
+    VENUES ||--|{ SEATS : contains
+    VENUES ||--o{ EVENTS : hosts
+    
+    SEAT_CATEGORIES ||--|{ SEATS : categorizes
+    SEAT_CATEGORIES ||--o{ EVENT_SEAT_PRICES : priced_in
+    
+    EVENTS ||--|{ EVENT_SEAT_PRICES : sets_rates
+    EVENTS ||--|{ EVENT_SEATS : manages_inventory
+    EVENTS ||--o{ BOOKINGS : receives
+    EVENTS ||--o{ SEAT_HOLDS : holds_against
+    EVENTS ||--o{ WAITLIST_ENTRIES : has_queue
+    
+    SEATS ||--o{ EVENT_SEATS : instantiated_as
+    
+    EVENT_SEATS ||--o{ SEAT_HOLD_ITEMS : locked_by
+    EVENT_SEATS ||--o{ BOOKING_ITEMS : booked_as
+    EVENT_SEATS ||--o{ WAITLIST_OFFERS : offered_for
+    
+    SEAT_HOLDS ||--|{ SEAT_HOLD_ITEMS : contains
+    SEAT_HOLDS ||--o| BOOKINGS : checked_out_into
+    
+    BOOKINGS ||--|{ BOOKING_ITEMS : includes
+    BOOKINGS ||--|| TICKETS : issues
+    
+    WAITLIST_ENTRIES ||--o{ WAITLIST_OFFERS : produces
 ```
+
+### Table Breakdown
+1. **`users`**: Customer, Organiser, and Admin accounts with bcrypt password hashes and roles.
+2. **`venues`**: Physical venues (cinemas, concert halls, arenas) with capacity.
+3. **`seat_categories`**: Pricing tiers (VIP, Premium, Standard, Classic) with custom colors.
+4. **`seats`**: Physical venue seat coordinates (`row`, `column`, `seat_number`, `is_aisle`).
+5. **`events`**: Shows with date, start/end time, poster URL, and status (`DRAFT`, `PUBLISHED`, `SOLD_OUT`, `CANCELLED`).
+6. **`event_seat_prices`**: Per-event, per-category pricing mappings.
+7. **`event_seats`**: **The Critical Real-Time Inventory Table**. Cloned per event with status (`AVAILABLE`, `HELD`, `BOOKED`, `OFFERED`) and version counter.
+8. **`seat_holds`**: Temporary reservations with `expires_at` timestamp and status (`ACTIVE`, `COMPLETED`, `EXPIRED`, `RELEASED`).
+9. **`seat_hold_items`**: Junction mapping holds to held event seats.
+10. **`bookings`**: Confirmed customer transactions with human-readable `booking_ref` (e.g. `TBS-8F4K2P`) and idempotency key.
+11. **`booking_items`**: Detailed line items with seat label, category, and price.
+12. **`tickets`**: Digital passes with QR payload and visual base64 Data URL.
+13. **`waitlist_entries`**: FIFO queue per event and category with explicit integer `position`.
+14. **`waitlist_offers`**: Time-limited offers (5-min TTL) allocated to waitlisted customers.
+
+---
+
+## 🔒 Concurrency Strategy & Anti-Double-Booking
+
+1. **Deterministic Lock Ordering**:
+   All seat IDs in a hold request are sorted alphabetically (`eventSeatIds.sort()`) before acquiring database locks, eliminating circular lock-order deadlocks between concurrent multi-seat orders.
+2. **Row-Level Locking (`FOR UPDATE`)**:
+   Transactions execute under `READ COMMITTED` isolation with explicit row locks:
+   ```sql
+   SELECT es.id, es.status
+   FROM event_seats es
+   WHERE es.id = ANY($1::uuid[]) AND es.event_id = $2::uuid
+   ORDER BY es.id ASC
+   FOR UPDATE;
+   ```
+3. **Atomic Conditional State Transitions**:
+   ```sql
+   UPDATE event_seats
+   SET status = 'HELD', version = version + 1, updated_at = NOW()
+   WHERE id = ANY($1::uuid[]) AND event_id = $2 AND status = 'AVAILABLE'
+   RETURNING id;
+   ```
+   If returned row count is strictly less than requested seats, the transaction throws a `409 ConflictException` and automatically rolls back.
+4. **Database Partial Unique Index**:
+   ```sql
+   CREATE UNIQUE INDEX idx_one_active_reservation_per_seat
+   ON event_seats(event_id, seat_id)
+   WHERE status IN ('HELD', 'BOOKED', 'OFFERED');
+   ```
+
+---
+
+## ⏳ Seat Hold TTL & Automatic Release Logic
+
+- **Configurable TTL**: Defaults to 10 minutes (`SEAT_HOLD_TTL_MINUTES=10`).
+- **PostgreSQL Timestamp Source of Truth**: Expiration timestamps are computed using PostgreSQL server time (`NOW() + INTERVAL '10 minutes'`), never Node.js or client device clocks, eliminating clock drift vulnerabilities.
+- **Two-Tier Expiration Handling**:
+  1. **In-Band Lazy Check**: Any query checking seat availability treats `HELD` seats with `expires_at < NOW()` as immediately claimable.
+  2. **Active Out-of-Band Worker**: Background worker runs every 5 seconds, finds expired holds via `FOR UPDATE SKIP LOCKED`, sets status to `EXPIRED`, updates `event_seats` back to `AVAILABLE`, and broadcasts `seat:released` to all WebSocket subscribers.
+
+---
+
+## 📋 FIFO Waitlist & Sequential Cascading Offer Logic
+
+When a category is sold out:
+1. **FIFO Queue**: Customers join category waitlists (`waitlist_entries`), assigned an auto-incrementing `position` per event and category. Duplicate active entries per user are blocked via unique constraints.
+2. **Cancellation Detection**: When a customer cancels a confirmed booking:
+   - The seat is **NOT** immediately released to the public.
+   - The system queries the earliest `WAITING` candidate using `FOR UPDATE SKIP LOCKED`.
+   - The seat status transitions to `OFFERED`.
+   - A `waitlist_offer` is created with a 5-minute TTL (`WAITLIST_OFFER_TTL_MINUTES=5`).
+   - The customer receives an instant private WebSocket event and transactional notification email.
+3. **Sequential Cascading**:
+   - If the customer accepts before expiry, the seat is converted to `BOOKED` and confirmed.
+   - If the offer expires without action, the worker marks the offer `EXPIRED`, queries the **next customer in FIFO queue**, creates a new offer, and notifies them.
+   - The cascade repeats until a customer claims the seat or no waiting entries remain.
 
 ---
 
@@ -88,7 +161,7 @@ ticket-booking-system/
 
 ### 1. Prerequisites
 - **Node.js**: `v20.x` or `v22.x`
-- **Docker** & **Docker Compose** (for PostgreSQL & Redis)
+- **Docker** & **Docker Compose** (for PostgreSQL & Redis) OR local PostgreSQL/Redis services.
 
 ### 2. Start PostgreSQL & Redis
 ```bash
@@ -138,16 +211,16 @@ The login page features instant **One-Click Demo Fill buttons**:
 
 ---
 
-## 🧪 Concurrency Stress Testing
+## 🧪 Concurrency Stress Testing & Verification
 
 A dedicated test suite simulates **20 simultaneous parallel buyer requests** competing for the exact same seat at the identical millisecond:
 
 ```bash
 cd server
-npm test
+npx jest --rootDir . test/booking-engine.spec.ts
 ```
 
-### Expected Output:
+### Sample Output:
 ```text
 PASS test/booking-engine.spec.ts
   Booking Engine & Concurrency Unit/Integration Tests
@@ -162,45 +235,20 @@ PASS test/booking-engine.spec.ts
       ✓ triggers time-limited offer to first waitlisted customer upon booking cancellation (35ms)
 ```
 
----
-
-## 📜 System Verification Scenarios
-
-### Scenario A — Normal Booking Flow
-1. Login as `alex.customer@gmail.com`
-2. Open *Avengers: Secret Wars* -> Click **Select Seats**
-3. Select Seat `B4` -> Click **Hold Seats & Checkout**
-4. Observe **08:42 Countdown Timer** in Checkout
-5. Click **Confirm & Book Tickets**
-6. View generated digital pass with verified QR code.
-
-### Scenario B — Abandoned Checkout & Auto-Release
-1. Select Seat `C5` and proceed to checkout
-2. Close browser tab or wait for the 10-minute hold to expire
-3. Background worker detects `expiresAt < NOW()`, resets seat to `AVAILABLE`, and broadcasts `seat:released`.
-
-### Scenario C — Concurrent Booking Contention
-1. Open two separate incognito windows logged into Customer 1 and Customer 2
-2. Navigate both to the seat selection map for the same event
-3. Click Seat `A1` on both screens simultaneously
-4. **Result**: Exactly one customer acquires the hold; the other immediately sees *"Seat A1 is temporarily reserved by another customer."*
-
-### Scenario D — Cancellation & Automatic FIFO Waitlist Cascade
-1. Customer A cancels their booking for Seat `A5`
-2. The engine detects active waitlist entries for that category
-3. The seat status changes to `OFFERED`
-4. Customer B (first in FIFO queue) receives an instant notification with a 5-minute countdown offer
-5. If Customer B ignores the offer until expiration, the worker cascades the offer to Customer C.
+To run the live 10-point requirements test:
+```bash
+npx ts-node test-requirements.ts
+```
 
 ---
 
-## 🚀 Deployment Instructions
+## 🚀 Cloud Deployment Guide
 
-- **Backend**: Can be containerized with Docker and deployed to **Railway** or **Render** with PostgreSQL.
-- **Frontend**: Deployable directly to **Vercel** with `NEXT_PUBLIC_API_URL` pointing to the backend.
+- **Frontend (Vercel)**: Connect repository, set root directory to `client`, set environment variable `NEXT_PUBLIC_API_URL` to backend URL.
+- **Backend (Render / Railway)**: Connect repository, set root directory to `server`, add PostgreSQL & Redis plugins, run `npx prisma db push && npx ts-node prisma/seed.ts`, start command: `npm run start:prod`.
 
 ---
 
 ## 📄 Documentation Links
-- [System Design & Concurrency Strategy](file:///Users/anmoldadhich/.gemini/antigravity/scratch/ticket-booking-system/SYSTEM_DESIGN.md)
-- [Complete REST API Documentation](file:///Users/anmoldadhich/.gemini/antigravity/scratch/ticket-booking-system/API_DOCUMENTATION.md)
+- [System Design Write-Up (678 Words)](file:///Users/anmoldadhich/Desktop/ticket-booking-system/SYSTEM_DESIGN.md)
+- [Complete REST API Documentation](file:///Users/anmoldadhich/Desktop/ticket-booking-system/API_DOCUMENTATION.md)
