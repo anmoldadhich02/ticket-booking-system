@@ -4,13 +4,19 @@
 
 ---
 
+## 🌐 Live Hosted Application
+- **Frontend App (Vercel)**: **[https://client-phi-nine-73.vercel.app/](https://client-phi-nine-73.vercel.app/)**
+- **GitHub Repository**: **[https://github.com/anmoldadhich02/ticket-booking-system](https://github.com/anmoldadhich02/ticket-booking-system)**
+
+---
+
 ## 📋 Deliverables Summary Checklist
 
 | # | Deliverable | Status & Location |
 |:---|:---|:---|
 | **1** | **Complete Source Code (Zip & Repo)** | 📂 [`ticket-booking-system.zip`](file:///Users/anmoldadhich/Desktop/ticket-booking-system.zip) (441 KB) & [GitHub Repository](https://github.com/anmoldadhich02/ticket-booking-system) |
 | **2** | **README Documentation** | 📄 Setup guide, `.env.example`, API docs, DB schema, seat hold & waitlist logic (Included below) |
-| **3** | **Hosted Application Guide** | 🚀 Ready for 1-click deployment on **Vercel** (Frontend) + **Railway / Render** (Backend & PostgreSQL) |
+| **3** | **Hosted Application URL** | 🌐 **[https://client-phi-nine-73.vercel.app/](https://client-phi-nine-73.vercel.app/)** |
 | **4** | **System Design Write-Up (800 words max)** | 📄 [`SYSTEM_DESIGN.md`](file:///Users/anmoldadhich/Desktop/ticket-booking-system/SYSTEM_DESIGN.md) (678 words — covers seat hold TTL, concurrency, waitlists & offers) |
 
 ---
